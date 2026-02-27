@@ -12,34 +12,32 @@ from Claude Code, right next to your terminal.
 - [Claude Code](https://claude.com/claude-code) CLI (`claude`)
 - Node.js >= 18
 
-## Quick Install
+## Install
 
 ```bash
-unzip cmux-browser-mcp.zip
+git clone https://github.com/jasonraz/cmux-browser-mcp.git
 cd cmux-browser-mcp
 chmod +x install.sh
 ./install.sh
 ```
 
-Then **restart Claude Code**.
+Then **restart Claude Code**. Verify with `/mcp` — you should see `cmux-browser` listed.
 
-## Manual Install
+The install script will:
+1. Copy `server.mjs` and `package.json` to `~/.claude/mcp-servers/cmux-browser/`
+2. Run `npm install` to fetch the MCP SDK dependency
+3. Register the server with Claude Code via `claude mcp add`
+
+### Manual Install
+
+If you prefer to do it yourself:
 
 ```bash
-# 1. Copy files
 mkdir -p ~/.claude/mcp-servers/cmux-browser
 cp package.json server.mjs ~/.claude/mcp-servers/cmux-browser/
-
-# 2. Install dependencies
 cd ~/.claude/mcp-servers/cmux-browser && npm install
-
-# 3. Register with Claude Code
 claude mcp add cmux-browser --scope user -- node ~/.claude/mcp-servers/cmux-browser/server.mjs
-
-# 4. Restart Claude Code
 ```
-
-Verify with `/mcp` inside Claude Code — you should see `cmux-browser` listed.
 
 ## Tools (31)
 

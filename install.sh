@@ -70,8 +70,6 @@ if [ -n "$CLAUDE_CLI" ]; then
   echo "==> Registering MCP server with Claude Code"
 
   # Unset CLAUDECODE in case we're running inside a Claude Code session
-  REGISTER_CMD="CLAUDECODE= \"$CLAUDE_CLI\" mcp add cmux-browser --scope user -- node \"$INSTALL_DIR/server.mjs\""
-
   if CLAUDECODE="" "$CLAUDE_CLI" mcp add cmux-browser --scope user -- node "$INSTALL_DIR/server.mjs" 2>/dev/null; then
     echo "  Registered successfully."
   else
