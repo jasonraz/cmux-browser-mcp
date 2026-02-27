@@ -1,0 +1,10 @@
+{
+  "name": "cmux-browser-mcp",
+  "version": "1.0.0",
+  "description": "MCP server that gives Claude Code full control of cmux's embedded browser",
+  "type": "module",
+  "main": "server.mjs",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1"
+  }
+}
