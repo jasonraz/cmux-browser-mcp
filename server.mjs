@@ -44,8 +44,13 @@ async function cmuxJson(...args) {
   return JSON.parse(result);
 }
 
+// Track the most recently opened browser surface so callers don't have to
+// pass it explicitly on every single tool call.
+let defaultSurface = null;
+
 function surfaceArgs(surface) {
-  return surface ? ["--surface", surface] : [];
+  const resolved = surface || defaultSurface;
+  return resolved ? [resolved] : [];
 }
 
 const server = new McpServer({
@@ -63,6 +68,9 @@ server.tool(
     const args = ["browser", "open"];
     if (url) args.push(url);
     const result = await cmux(...args);
+    // Parse surface ref from output (e.g. "OK surface=surface:4 pane=pane:2")
+    const match = result.match(/surface=(surface:\S+)/);
+    if (match) defaultSurface = match[1];
     return { content: [{ type: "text", text: result }] };
   }
 );
