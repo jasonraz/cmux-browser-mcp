@@ -84,9 +84,12 @@ server.tool(
     snapshot_after: z.boolean().optional().describe("Take a snapshot after navigating"),
   },
   async ({ url, surface, snapshot_after }) => {
-    const args = ["browser", ...surfaceArgs(surface), "navigate", url];
-    if (snapshot_after) args.push("--snapshot-after");
-    const result = await cmux(...args);
+    const sArgs = surfaceArgs(surface);
+    const result = await cmux("browser", ...sArgs, "navigate", url);
+    if (snapshot_after) {
+      const snap = await cmux("browser", ...sArgs, "snapshot", "--interactive", "--compact");
+      return { content: [{ type: "text", text: `${result}\n${snap}` }] };
+    }
     return { content: [{ type: "text", text: result }] };
   }
 );
