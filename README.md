@@ -71,8 +71,8 @@ The core workflow is **snapshot → ref → act**:
 
 ### Screenshots
 
-`browser_screenshot` uses `cmux --json browser screenshot` to capture a PNG,
-saves it to a temp file, and returns the path. Claude Code can then `Read` the
+`browser_screenshot` uses `cmux browser screenshot --out <path>` to capture a
+PNG directly to disk and returns the file path. Claude Code can then `Read` the
 PNG to view it visually.
 
 ## Configuration
@@ -87,12 +87,17 @@ PNG to view it visually.
   strips this from child processes so browser commands target the correct surface
   instead of the caller's terminal. This is handled automatically.
 
-- **Screenshots need `--json`**: The bare `cmux browser screenshot` returns "OK"
-  with no image data. The server uses `cmux --json browser screenshot` to get
-  the `png_base64` field. This is handled automatically.
+- **`maxBuffer`**: The server sets `maxBuffer` to 50 MB for `execFile` calls to
+  accommodate large command outputs.
 
-- **`maxBuffer`**: Screenshot base64 data can be large. The server sets
-  `maxBuffer` to 50 MB for `execFile` calls.
+## Update
+
+```bash
+git pull
+./install.sh
+```
+
+Then restart Claude Code.
 
 ## Uninstall
 

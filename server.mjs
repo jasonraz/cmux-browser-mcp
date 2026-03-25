@@ -4,7 +4,6 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -27,7 +26,7 @@ async function cmux(...args) {
   try {
     const { stdout, stderr } = await execFileAsync(CMUX_CLI, args, {
       timeout: 30_000,
-      maxBuffer: 50 * 1024 * 1024, // 50 MB for screenshot base64
+      maxBuffer: 50 * 1024 * 1024,
       env: cmuxEnv(),
     });
     const out = (stdout || "").trim();
@@ -37,11 +36,6 @@ async function cmux(...args) {
     const msg = e.stderr?.trim() || e.stdout?.trim() || e.message;
     throw new Error(`cmux ${args.join(" ")} failed: ${msg}`);
   }
-}
-
-async function cmuxJson(...args) {
-  const result = await cmux("--json", ...args);
-  return JSON.parse(result);
 }
 
 // Track the most recently opened browser surface so callers don't have to
@@ -172,18 +166,13 @@ server.tool(
     output_path: z.string().optional().describe("File path to save the PNG (defaults to a temp file)"),
   },
   async ({ surface, output_path }) => {
-    const args = ["browser", ...surfaceArgs(surface), "screenshot"];
-    const data = await cmuxJson(...args);
-    if (!data.png_base64) {
-      return { content: [{ type: "text", text: "Screenshot failed: no image data returned" }] };
-    }
-    const imgBuffer = Buffer.from(data.png_base64, "base64");
     const filePath =
       output_path || join(tmpdir(), `cmux-screenshot-${Date.now()}.png`);
-    await writeFile(filePath, imgBuffer);
+    const args = ["browser", ...surfaceArgs(surface), "screenshot", "--out", filePath];
+    const result = await cmux(...args);
     return {
       content: [
-        { type: "text", text: `Screenshot saved to: ${filePath} (${imgBuffer.length} bytes)` },
+        { type: "text", text: `Screenshot saved to: ${filePath}\n${result}`.trim() },
       ],
     };
   }
@@ -246,7 +235,7 @@ server.tool(
   },
   async ({ selector, text, surface, snapshot_after }) => {
     const args = ["browser", ...surfaceArgs(surface), "fill", selector];
-    if (text) args.push(text);
+    args.push(text);
     if (snapshot_after) args.push("--snapshot-after");
     const result = await cmux(...args);
     return { content: [{ type: "text", text: result }] };
@@ -570,8 +559,7 @@ server.tool(
     surface: z.string().optional().describe("Browser surface ref"),
   },
   async ({ target, surface }) => {
-    const subcommand = target === "main" ? "frame" : "frame";
-    const args = ["browser", ...surfaceArgs(surface), subcommand, target];
+    const args = ["browser", ...surfaceArgs(surface), "frame", target];
     const result = await cmux(...args);
     return { content: [{ type: "text", text: result }] };
   }
