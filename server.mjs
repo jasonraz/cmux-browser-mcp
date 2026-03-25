@@ -142,7 +142,7 @@ server.tool(
     interactive: z.boolean().optional().default(true).describe("Only show interactive elements (default true)"),
     compact: z.boolean().optional().default(true).describe("Compact output (default true)"),
     cursor: z.boolean().optional().describe("Include cursor position"),
-    max_depth: z.number().optional().describe("Max tree depth"),
+    max_depth: z.coerce.number().optional().describe("Max tree depth"),
     selector: z.string().optional().describe("CSS selector to scope the snapshot"),
     surface: z.string().optional().describe("Browser surface ref"),
   },
@@ -313,8 +313,8 @@ server.tool(
   "Scroll the page or an element",
   {
     selector: z.string().optional().describe("CSS selector to scroll (omit for page)"),
-    dx: z.number().optional().describe("Horizontal scroll amount"),
-    dy: z.number().optional().describe("Vertical scroll amount (positive = down)"),
+    dx: z.coerce.number().optional().describe("Horizontal scroll amount"),
+    dy: z.coerce.number().optional().describe("Vertical scroll amount (positive = down)"),
     surface: z.string().optional().describe("Browser surface ref"),
     snapshot_after: z.boolean().optional().describe("Take a snapshot after"),
   },
@@ -372,7 +372,7 @@ server.tool(
     url_contains: z.string().optional().describe("Wait for URL to contain this string"),
     load_state: z.enum(["interactive", "complete"]).optional().describe("Wait for load state"),
     js_function: z.string().optional().describe("JS function that returns truthy when ready"),
-    timeout_ms: z.number().optional().describe("Timeout in milliseconds (default varies)"),
+    timeout_ms: z.coerce.number().optional().describe("Timeout in milliseconds (default varies)"),
     surface: z.string().optional().describe("Browser surface ref"),
   },
   async ({ selector, text, url_contains, load_state, js_function, timeout_ms, surface }) => {
@@ -398,10 +398,9 @@ server.tool(
     surface: z.string().optional().describe("Browser surface ref"),
   },
   async ({ script, surface }) => {
-    // Wrap in async IIFE if the script uses await or top-level return,
-    // since Playwright's page.evaluate() doesn't support either in raw scripts.
-    const needsWrap = /\bawait\b/.test(script) || /^\s*return\b/m.test(script);
-    const finalScript = needsWrap ? `(async () => {\n${script}\n})()` : script;
+    // Always wrap in async IIFE — Playwright treats eval strings as function
+    // bodies, so top-level return and await both require a wrapper.
+    const finalScript = `(async () => {\n${script}\n})()`;
     const result = await cmux("browser", ...surfaceArgs(surface), "eval", finalScript);
     return { content: [{ type: "text", text: result }] };
   }
