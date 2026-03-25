@@ -398,7 +398,11 @@ server.tool(
     surface: z.string().optional().describe("Browser surface ref"),
   },
   async ({ script, surface }) => {
-    const result = await cmux("browser", ...surfaceArgs(surface), "eval", script);
+    // Wrap in async IIFE if the script uses await or top-level return,
+    // since Playwright's page.evaluate() doesn't support either in raw scripts.
+    const needsWrap = /\bawait\b/.test(script) || /^\s*return\b/m.test(script);
+    const finalScript = needsWrap ? `(async () => {\n${script}\n})()` : script;
+    const result = await cmux("browser", ...surfaceArgs(surface), "eval", finalScript);
     return { content: [{ type: "text", text: result }] };
   }
 );
