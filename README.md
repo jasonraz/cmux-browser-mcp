@@ -39,11 +39,11 @@ cd ~/.claude/mcp-servers/cmux-browser && npm install
 claude mcp add cmux-browser --scope user -- node ~/.claude/mcp-servers/cmux-browser/server.mjs
 ```
 
-## Tools (31)
+## Tools (43)
 
 | Category | Tools |
 |---|---|
-| **Navigation** | `browser_open`, `browser_navigate`, `browser_back`, `browser_forward`, `browser_reload` |
+| **Navigation** | `browser_open`, `browser_open_split`, `browser_navigate`, `browser_back`, `browser_forward`, `browser_reload` |
 | **Inspection** | `browser_snapshot`, `browser_screenshot`, `browser_get_url`, `browser_get` |
 | **Interaction** | `browser_click`, `browser_fill`, `browser_type`, `browser_press`, `browser_hover`, `browser_select`, `browser_scroll`, `browser_check`, `browser_uncheck` |
 | **Waiting** | `browser_wait` |
@@ -52,9 +52,21 @@ claude mcp add cmux-browser --scope user -- node ~/.claude/mcp-servers/cmux-brow
 | **Debug** | `browser_console`, `browser_errors`, `browser_highlight` |
 | **Tabs** | `browser_tab` |
 | **Dialogs** | `browser_dialog` |
-| **State** | `browser_cookies`, `browser_storage` |
+| **State** | `browser_cookies`, `browser_storage`, `browser_state` |
+| **Downloads** | `browser_download` |
 | **Injection** | `browser_add_script`, `browser_add_init_script`, `browser_add_style` |
 | **Frames** | `browser_frame` |
+| **Network** | `browser_network`, `browser_offline` |
+| **Device** | `browser_viewport`, `browser_geolocation` |
+| **Recording** | `browser_screencast`, `browser_trace` |
+| **Identify** | `browser_identify` |
+
+### Tool notes
+
+- **`browser_click`** — supports `action`: `click` (default), `dblclick`, `focus`, `scroll-into-view`
+- **`browser_press`** — supports `action`: `press` (default), `keydown`, `keyup`
+- **`browser_screenshot`** — accepts optional `--json` flag via `json: true`
+- **`browser_tab`** — `action` accepts `new`, `list`, `switch`, `close`, or a numeric tab index
 
 ## How It Works
 
@@ -80,6 +92,12 @@ PNG to view it visually.
 | Env var | Default | Description |
 |---|---|---|
 | `CMUX_CLI_PATH` | `/Applications/cmux.app/Contents/Resources/bin/cmux` | Path to the cmux CLI binary |
+
+## Version compatibility
+
+Tools check cmux's `capabilities` endpoint at runtime. If you call a tool that requires a newer version of cmux than you have installed, you'll get a clear error message telling you which capability is missing — not a cryptic failure.
+
+All tools present in v1.1.x continue to work unchanged.
 
 ## Gotchas
 

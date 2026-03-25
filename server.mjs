@@ -38,6 +38,40 @@ async function cmux(...args) {
   }
 }
 
+// Lazily-fetched capabilities set for graceful degradation on older cmux versions.
+let _capabilities = null;
+async function getCapabilities() {
+  if (_capabilities) return _capabilities;
+  try {
+    const out = await cmux("capabilities");
+    const parsed = JSON.parse(out);
+    _capabilities = new Set(parsed.methods || []);
+  } catch {
+    _capabilities = new Set();
+  }
+  return _capabilities;
+}
+
+function requireCapability(method) {
+  return async (caps) => {
+    if (caps.size > 0 && !caps.has(method)) {
+      throw new Error(
+        `This feature requires a newer version of cmux (missing capability: ${method}). Please update cmux.`
+      );
+    }
+  };
+}
+
+async function cmuxWithCap(method, ...args) {
+  const caps = await getCapabilities();
+  if (caps.size > 0 && !caps.has(method)) {
+    throw new Error(
+      `This feature requires a newer version of cmux (missing capability: ${method}). Please update cmux.`
+    );
+  }
+  return cmux(...args);
+}
+
 // Track the most recently opened browser surface so callers don't have to
 // pass it explicitly on every single tool call.
 let defaultSurface = null;
@@ -49,7 +83,7 @@ function surfaceArgs(surface) {
 
 const server = new McpServer({
   name: "cmux-browser",
-  version: "1.0.0",
+  version: "1.2.0",
 });
 
 // --- Browser open / navigate ---
@@ -62,7 +96,6 @@ server.tool(
     const args = ["browser", "open"];
     if (url) args.push(url);
     const result = await cmux(...args);
-    // Parse surface ref from output (e.g. "OK surface=surface:4 pane=pane:2")
     const match = result.match(/surface=(surface:\S+)/);
     if (match) defaultSurface = match[1];
     return { content: [{ type: "text", text: result }] };
@@ -164,11 +197,13 @@ server.tool(
   {
     surface: z.string().optional().describe("Browser surface ref (e.g. surface:2)"),
     output_path: z.string().optional().describe("File path to save the PNG (defaults to a temp file)"),
+    json: z.boolean().optional().describe("Output JSON metadata instead of plain text"),
   },
-  async ({ surface, output_path }) => {
+  async ({ surface, output_path, json }) => {
     const filePath =
       output_path || join(tmpdir(), `cmux-screenshot-${Date.now()}.png`);
     const args = ["browser", ...surfaceArgs(surface), "screenshot", "--out", filePath];
+    if (json) args.push("--json");
     const result = await cmux(...args);
     return {
       content: [
@@ -210,16 +245,20 @@ server.tool(
 
 server.tool(
   "browser_click",
-  "Click an element by ref or CSS selector",
+  "Click an element by ref or CSS selector. action can be click (default), dblclick, focus, or scroll-into-view.",
   {
     selector: z.string().describe("Element ref (e.g. e1) or CSS selector"),
+    action: z.enum(["click", "dblclick", "focus", "scroll-into-view"]).optional().default("click").describe("Click action (default: click)"),
     surface: z.string().optional().describe("Browser surface ref"),
     snapshot_after: z.boolean().optional().describe("Take a snapshot after clicking"),
   },
-  async ({ selector, surface, snapshot_after }) => {
-    const args = ["browser", ...surfaceArgs(surface), "click", selector];
+  async ({ selector, action, surface, snapshot_after }) => {
+    const act = action ?? "click";
+    const capMap = { dblclick: "browser.dblclick", focus: "browser.focus", "scroll-into-view": "browser.scroll_into_view" };
+    const cap = capMap[act];
+    const args = ["browser", ...surfaceArgs(surface), act, selector];
     if (snapshot_after) args.push("--snapshot-after");
-    const result = await cmux(...args);
+    const result = cap ? await cmuxWithCap(cap, ...args) : await cmux(...args);
     return { content: [{ type: "text", text: result }] };
   }
 );
@@ -261,16 +300,20 @@ server.tool(
 
 server.tool(
   "browser_press",
-  "Press a key (e.g. Enter, Tab, Escape, ArrowDown)",
+  "Press, keydown, or keyup a key (e.g. Enter, Tab, Escape, ArrowDown)",
   {
     key: z.string().describe("Key to press (e.g. Enter, Tab, Escape)"),
+    action: z.enum(["press", "keydown", "keyup"]).optional().default("press").describe("Key action (default: press)"),
     surface: z.string().optional().describe("Browser surface ref"),
     snapshot_after: z.boolean().optional().describe("Take a snapshot after"),
   },
-  async ({ key, surface, snapshot_after }) => {
-    const args = ["browser", ...surfaceArgs(surface), "press", key];
+  async ({ key, action, surface, snapshot_after }) => {
+    const act = action ?? "press";
+    const capMap = { keydown: "browser.keydown", keyup: "browser.keyup" };
+    const cap = capMap[act];
+    const args = ["browser", ...surfaceArgs(surface), act, key];
     if (snapshot_after) args.push("--snapshot-after");
-    const result = await cmux(...args);
+    const result = cap ? await cmuxWithCap(cap, ...args) : await cmux(...args);
     return { content: [{ type: "text", text: result }] };
   }
 );
@@ -472,7 +515,7 @@ server.tool(
   "browser_tab",
   "Manage browser tabs (new, list, switch, close)",
   {
-    action: z.enum(["new", "list", "switch", "close"]).describe("Tab action"),
+    action: z.string().describe("Tab action: new, list, switch, close, or a numeric index"),
     target: z.string().optional().describe("Tab index or URL (for switch/new)"),
     surface: z.string().optional().describe("Browser surface ref"),
   },
@@ -605,6 +648,176 @@ server.tool(
   },
   async ({ css, surface }) => {
     const result = await cmux("browser", ...surfaceArgs(surface), "addstyle", css);
+    return { content: [{ type: "text", text: result }] };
+  }
+);
+
+// --- Viewport ---
+
+server.tool(
+  "browser_viewport",
+  "Set the browser viewport size",
+  {
+    width: z.coerce.number().describe("Viewport width in pixels"),
+    height: z.coerce.number().describe("Viewport height in pixels"),
+    surface: z.string().optional().describe("Browser surface ref"),
+  },
+  async ({ width, height, surface }) => {
+    const result = await cmuxWithCap("browser.viewport.set", "browser", ...surfaceArgs(surface), "viewport", "set", String(width), String(height));
+    return { content: [{ type: "text", text: result }] };
+  }
+);
+
+// --- Geolocation ---
+
+server.tool(
+  "browser_geolocation",
+  "Set the browser geolocation (latitude/longitude)",
+  {
+    latitude: z.coerce.number().describe("Latitude"),
+    longitude: z.coerce.number().describe("Longitude"),
+    surface: z.string().optional().describe("Browser surface ref"),
+  },
+  async ({ latitude, longitude, surface }) => {
+    const result = await cmuxWithCap("browser.geolocation.set", "browser", ...surfaceArgs(surface), "geolocation", "set", String(latitude), String(longitude));
+    return { content: [{ type: "text", text: result }] };
+  }
+);
+
+// --- Offline mode ---
+
+server.tool(
+  "browser_offline",
+  "Enable or disable browser offline mode",
+  {
+    offline: z.boolean().describe("true to go offline, false to go online"),
+    surface: z.string().optional().describe("Browser surface ref"),
+  },
+  async ({ offline, surface }) => {
+    const result = await cmuxWithCap("browser.offline.set", "browser", ...surfaceArgs(surface), "offline", "set", offline ? "true" : "false");
+    return { content: [{ type: "text", text: result }] };
+  }
+);
+
+// --- Network ---
+
+server.tool(
+  "browser_network",
+  "Inspect or intercept network requests (list, route, unroute)",
+  {
+    action: z.enum(["requests", "route", "unroute"]).describe("Network action"),
+    args: z.array(z.string()).optional().describe("Additional arguments (URL pattern, handler, etc.)"),
+    surface: z.string().optional().describe("Browser surface ref"),
+  },
+  async ({ action, args: extraArgs, surface }) => {
+    const capMap = { requests: "browser.network.requests", route: "browser.network.route", unroute: "browser.network.unroute" };
+    const cmdArgs = ["browser", ...surfaceArgs(surface), "network", action];
+    if (extraArgs) cmdArgs.push(...extraArgs);
+    const result = await cmuxWithCap(capMap[action], ...cmdArgs);
+    return { content: [{ type: "text", text: result }] };
+  }
+);
+
+// --- Screencast ---
+
+server.tool(
+  "browser_screencast",
+  "Start or stop a browser screencast recording",
+  {
+    action: z.enum(["start", "stop"]).describe("Start or stop recording"),
+    args: z.array(z.string()).optional().describe("Additional arguments (e.g. output path)"),
+    surface: z.string().optional().describe("Browser surface ref"),
+  },
+  async ({ action, args: extraArgs, surface }) => {
+    const cap = action === "start" ? "browser.screencast.start" : "browser.screencast.stop";
+    const cmdArgs = ["browser", ...surfaceArgs(surface), "screencast", action];
+    if (extraArgs) cmdArgs.push(...extraArgs);
+    const result = await cmuxWithCap(cap, ...cmdArgs);
+    return { content: [{ type: "text", text: result }] };
+  }
+);
+
+// --- Trace ---
+
+server.tool(
+  "browser_trace",
+  "Start or stop a Playwright trace recording",
+  {
+    action: z.enum(["start", "stop"]).describe("Start or stop tracing"),
+    args: z.array(z.string()).optional().describe("Additional arguments (e.g. output path)"),
+    surface: z.string().optional().describe("Browser surface ref"),
+  },
+  async ({ action, args: extraArgs, surface }) => {
+    const cap = action === "start" ? "browser.trace.start" : "browser.trace.stop";
+    const cmdArgs = ["browser", ...surfaceArgs(surface), "trace", action];
+    if (extraArgs) cmdArgs.push(...extraArgs);
+    const result = await cmuxWithCap(cap, ...cmdArgs);
+    return { content: [{ type: "text", text: result }] };
+  }
+);
+
+// --- Open split ---
+
+server.tool(
+  "browser_open_split",
+  "Open a browser split pane (always creates a new split, unlike browser_open which reuses existing)",
+  { url: z.string().optional().describe("URL to open (optional)") },
+  async ({ url }) => {
+    const args = ["browser", "open-split"];
+    if (url) args.push(url);
+    const result = await cmuxWithCap("browser.open_split", ...args);
+    const match = result.match(/surface=(surface:\S+)/);
+    if (match) defaultSurface = match[1];
+    return { content: [{ type: "text", text: result }] };
+  }
+);
+
+// --- Download ---
+
+server.tool(
+  "browser_download",
+  "Wait for or trigger a file download",
+  {
+    wait: z.boolean().optional().describe("Wait for a download to complete"),
+    path: z.string().optional().describe("File path to save the download"),
+    timeout_ms: z.coerce.number().optional().describe("Timeout in milliseconds"),
+    surface: z.string().optional().describe("Browser surface ref"),
+  },
+  async ({ wait, path, timeout_ms, surface }) => {
+    const args = ["browser", ...surfaceArgs(surface), "download"];
+    if (wait) args.push("wait");
+    if (path) args.push("--path", path);
+    if (timeout_ms != null) args.push("--timeout-ms", String(timeout_ms));
+    const result = await cmuxWithCap("browser.download.wait", ...args);
+    return { content: [{ type: "text", text: result }] };
+  }
+);
+
+// --- Browser state save/load ---
+
+server.tool(
+  "browser_state",
+  "Save or load browser state (cookies, localStorage, etc.) to/from a file",
+  {
+    action: z.enum(["save", "load"]).describe("Save or load browser state"),
+    path: z.string().describe("File path for the state"),
+    surface: z.string().optional().describe("Browser surface ref"),
+  },
+  async ({ action, path, surface }) => {
+    const cap = action === "save" ? "browser.state.save" : "browser.state.load";
+    const result = await cmuxWithCap(cap, "browser", ...surfaceArgs(surface), "state", action, path);
+    return { content: [{ type: "text", text: result }] };
+  }
+);
+
+// --- Identify ---
+
+server.tool(
+  "browser_identify",
+  "Identify the current browser surface (returns surface/workspace refs)",
+  { surface: z.string().optional().describe("Browser surface ref") },
+  async ({ surface }) => {
+    const result = await cmux("browser", ...surfaceArgs(surface), "identify");
     return { content: [{ type: "text", text: result }] };
   }
 );
