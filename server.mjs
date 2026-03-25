@@ -83,7 +83,7 @@ function surfaceArgs(surface) {
 
 const server = new McpServer({
   name: "cmux-browser",
-  version: "1.2.0",
+  version: "1.2.1",
 });
 
 // --- Browser open / navigate ---
