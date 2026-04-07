@@ -83,7 +83,7 @@ function surfaceArgs(surface) {
 
 const server = new McpServer({
   name: "cmux-browser",
-  version: "1.2.1",
+  version: "1.3.0",
 });
 
 // --- Browser open / navigate ---
@@ -806,6 +806,28 @@ server.tool(
   async ({ action, path, surface }) => {
     const cap = action === "save" ? "browser.state.save" : "browser.state.load";
     const result = await cmuxWithCap(cap, "browser", ...surfaceArgs(surface), "state", action, path);
+    return { content: [{ type: "text", text: result }] };
+  }
+);
+
+// --- Webview focus ---
+
+server.tool(
+  "browser_focus_webview",
+  "Focus the webview within the browser surface (gives keyboard focus to the web page)",
+  { surface: z.string().optional().describe("Browser surface ref") },
+  async ({ surface }) => {
+    const result = await cmuxWithCap("browser.focus_webview", "browser", ...surfaceArgs(surface), "focus-webview");
+    return { content: [{ type: "text", text: result }] };
+  }
+);
+
+server.tool(
+  "browser_is_webview_focused",
+  "Check whether the webview within the browser surface currently has focus",
+  { surface: z.string().optional().describe("Browser surface ref") },
+  async ({ surface }) => {
+    const result = await cmuxWithCap("browser.is_webview_focused", "browser", ...surfaceArgs(surface), "is-webview-focused");
     return { content: [{ type: "text", text: result }] };
   }
 );
